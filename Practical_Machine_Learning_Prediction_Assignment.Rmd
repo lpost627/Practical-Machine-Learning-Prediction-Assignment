@@ -1,0 +1,158 @@
+---
+title: "Practical Machine Learning Prediction Assignment"
+author: "Lisa Post"
+date: "July 6, 2018"
+output: html_document
+---
+
+##Project Synopsis
+
+###Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+###Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+###Goal
+
+The goal of the project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. Any of the other variables can be used to predict with. This report describes how the model was built, how cross validation was used, what the expected out of sample error is, and why the choices were made. The prediction model will also be used to predict 20 different test cases.
+
+##Loading the Data
+
+```{r}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(randomForest)
+library(knitr)
+
+set.seed(12345)
+
+trainingUrl <-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testingUrl <-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+training <- read.csv(url(trainingUrl), na.strings=c("NA", "#DIV/0!", ""))
+testing <- read.csv(url(testingUrl), na.strings=c("NA", "#DIV/0!", ""))
+```
+
+The training dataset is partitioned into two.
+
+```{r}
+inTrain <- createDataPartition(training$classe, p=0.7, list=FALSE)
+Training_Set <- training[inTrain, ]
+Testing_Set <- training[-inTrain, ]
+dim(Training_Set); dim(Testing_Set)
+```
+
+##Cleaning the Data
+
+The Near Zero Variance (NZV) variables are removed.
+
+```{r}
+NZV <- nearZeroVar(Training_Set)
+Training_Set <- Training_Set[, -NZV]
+Testing_Set <- Testing_Set[, -NZV]
+dim(Training_Set); dim(Testing_Set)
+```
+
+Variables that are mostly NA are removed.
+
+```{r}
+All_NA <- sapply(Training_Set, function(x) mean(is.na(x))) > 0.95
+Training_Set <- Training_Set[, All_NA==FALSE]
+Testing_Set <- Testing_Set[, All_NA==FALSE]
+dim(Training_Set); dim(Testing_Set)
+```
+
+Variables that are identification only and not useful for prediction are removed.
+
+```{r}
+Training_Set <- Training_Set[, -(1:5)]
+Testing_Set <- Testing_Set[, -(1:5)]
+dim(Training_Set); dim(Testing_Set)
+```
+
+After cleaning the data, the number of variables for the analysis has been reduced to 54.
+
+##Prediction Model Building
+
+Three models are applied to the training dataset: Decision Tree, Generalized Boosted Model and Random Forest. The accuracies of each model when applied to the testing dataset is analyzed.
+
+###Decision Tree
+
+```{r}
+set.seed(12345)
+Mod_Fit_Dec_Tree <- rpart(classe ~ ., data=Training_Set, method="class")
+Predict_Dec_Tree <- predict(Mod_Fit_Dec_Tree, newdata=Testing_Set, type="class")
+Conf_Mat_Dec_Tree <- confusionMatrix(Predict_Dec_Tree, Testing_Set$classe)
+Conf_Mat_Dec_Tree
+```
+
+```{r}
+plot(Conf_Mat_Dec_Tree$table, col = Conf_Mat_Dec_Tree$byClass, main = paste("Decision Tree Accuracy =", round(Conf_Mat_Dec_Tree$overall['Accuracy'], 4)))
+```
+
+###Generalized Boosted Model
+
+```{r}
+set.seed(12345)
+Control_GBM <- trainControl(method="repeatedcv", number=5, repeats=1)
+Mod_Fit_GBM <- train(classe ~ ., data=Training_Set, method="gbm", trControl=Control_GBM, verbose=FALSE)
+Mod_Fit_GBM$finalModel
+```
+
+```{r}
+Predict_GBM <- predict(Mod_Fit_GBM, newdata=Testing_Set)
+Conf_Mat_GBM <- confusionMatrix(Predict_GBM, Testing_Set$classe)
+Conf_Mat_GBM
+```
+
+```{r}
+plot(Conf_Mat_GBM$table, col = Conf_Mat_GBM$byClass, main = paste("Generalized Boosted Model Accuracy =", round(Conf_Mat_GBM$overall['Accuracy'], 4)))
+```
+
+###Random Forest
+
+```{r}
+set.seed(12345)
+Control_RF <- trainControl(method="cv", number=3, verboseIter=FALSE)
+Mod_Fit_RF <- train(classe ~ ., data=Training_Set, method="rf", trControl=Control_RF)
+Mod_Fit_RF$finalModel
+```
+
+```{r}
+Predict_RF <- predict(Mod_Fit_RF, newdata=Testing_Set)
+Conf_Mat_RF <- confusionMatrix(Predict_RF, Testing_Set$classe)
+Conf_Mat_RF
+```
+
+```{r}
+plot(Conf_Mat_RF$table, col = Conf_Mat_RF$byClass, main = paste("Random Forest Accuracy =", round(Conf_Mat_RF$overall['Accuracy'], 4)))
+```
+
+##Model Selection and Predicting Results on the Test Data
+
+The Random Forest model has the most accurate results at 99.64% with an expected out of sample error of 100 - 99.64 = 0.36%. The Random Forest model will be applied to predict the 20 quiz results from the original testing dataset.
+
+```{r}
+Predict_Quiz <- predict(Mod_Fit_RF, newdata=testing)
+Predict_Quiz
+```
+
+
+
+
+
+
+
+
+
